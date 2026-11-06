@@ -147,7 +147,7 @@ class DeltaProvider(MarketDataProvider):
         try:
             data = response.json()
         except ValueError as exc:
-            raise ProviderError(f"Delta returned non-JSON ({response.status_code})") from exc
+            raise ProviderError(f"Delta returned non-JSON ({response.status_code})", retryable=response.status_code < 500 or response.status_code >= 500) from exc
         if response.status_code >= 400 or data.get("success") is False:
             message = data.get("error") or {}
             detail = message.get("context") or message.get("code") or response.text[:200]
