@@ -167,23 +167,23 @@ dropped for that reason instead of showing them as opportunities.
 
 ## Known limits (read before risking capital)
 
-1. **CoinSwitch options are simulated** in this build; its symbol grammar, contract
-   size and settlement currency are unverified until your key is allowlisted.
-   Instrument metadata is used when present, with a heuristic symbol parser as
-   fallback (failing instruments are counted and reported, not guessed).
-2. Delta options settle in **USD**; the CoinSwitch leg is assumed USDT. Normalised
-   and flagged, but stablecoin/FX risk is real.
+1. CoinSwitch options use the HFT API's `category: option` surface when
+   `COINSWITCH_OPTIONS_ALLOWLISTED=true` and valid hex Ed25519 credentials are set.
+   Otherwise the CoinSwitch leg is simulated and clearly labelled. Its options
+   metadata and symbol mapping still need confirmation against your allowlisted account.
+2. Delta options settle in **USD**; CoinSwitch settlement is read from instrument
+   metadata (typically USDT). USD/USDT normalisation is flagged; stablecoin/FX risk remains.
 3. Fees are venue taker rates; the CoinSwitch taker fee is an **assumption**
-   (configurable) until account specs are known.
+   (configurable) until your account's actual fee schedule is confirmed.
 4. Margin/leverage per venue is displayed from contract metadata only; the terminal
    does not simulate margin calls or liquidation.
-5. Quantities: Delta `size` is integer contracts. CoinSwitch documents options
-   `qty` in the base asset, which is ambiguous for options — verify with your key.
-6. Live reconciliation is polling-based, not a private WebSocket stream, and has been
-   exercised against stubbed venue responses only — it has not been run against a
-   funded exchange account in this build. Delta's signed `size` convention and
-   CoinSwitch's options `positionIdx`/qty semantics must be confirmed with your first
-   real order before trusting the P&L figures.
+5. Order quantities and limit prices are checked against each contract's published
+   `minOrderQty`, `qtyStep`, and `tickSize` before routing. Confirm the allowlisted
+   CoinSwitch options contract-value semantics against your account.
+6. Live reconciliation is polling-based, not a private WebSocket stream. It has not
+   been validated against a funded exchange account in this build. Start in paper
+   mode and verify order status, fills, position signs, settlement and P&L with
+   minimal-size live orders before relying on the figures.
 7. The terminal now requires a single administrator password and signed session cookie.
    Use HTTPS, a private network/VPN and firewall rules in production. This is not a
    multi-user system and does not include MFA or distributed login throttling. Keys stay
