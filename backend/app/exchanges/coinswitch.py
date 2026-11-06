@@ -4,13 +4,12 @@ Options trading and options market data are a *private beta* allowlisted per
 API key: unauthenticated or non-allowlisted calls return HTTP 401 with
 `Signature validation failed`. See https://api-trading.coinswitch.co/options/access
 
-Auth: Ed25519 signature over `METHOD + path + epoch_ms`, sent as
-X-AUTH-APIKEY / X-AUTH-SIGNATURE / X-AUTH-EPOCH (base64 signature).
+Auth: Ed25519 signature over `METHOD + URL-decoded path + epoch_ms`, sent as
+X-AUTH-APIKEY / X-AUTH-SIGNATURE / X-AUTH-EPOCH (hex-encoded key and signature).
 """
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import re
 import time
@@ -164,12 +163,17 @@ class CoinSwitchProvider(MarketDataProvider):
 
         epoch = str(int(time.time() * 1000))
         try:
-            secret = base64.b64decode(self._cfg.coinswitch_api_secret, validate=True)
+            secret = bytes.fromhex(self._cfg.coinswitch_api_secret)
+            if len(secret) != 32:
+                raise ValueError("Ed25519 private key must decode to exactly 32 bytes")
             private_key = Ed25519PrivateKey.from_private_bytes(secret)
         except Exception as exc:  # noqa: BLE001 - surfaced to the operator
-            raise ProviderError(f"CoinSwitch Ed25519 secret is not valid base64: {exc}") from exc
-        message = f"{method}{path}{epoch}".encode()
-        signature = base64.b64encode(private_key.sign(message)).decode()
+            raise ProviderError(f"CoinSwitch Ed25519 secret must be a 32-byte hex private key: {exc}") from exc
+        from urllib.parse import unquote_plus
+
+        decoded_path = unquote_plus(path)
+        message = f"{method.upper()}{decoded_path}{epoch}".encode()
+        signature = private_key.sign(message).hex()
         return {
             "X-AUTH-APIKEY": self._cfg.coinswitch_api_key,
             "X-AUTH-SIGNATURE": signature,
