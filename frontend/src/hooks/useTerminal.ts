@@ -187,8 +187,12 @@ export function useTerminal() {
           console.error("bad socket message", error);
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setConnected(false);
+        if (event.code === 4401) {
+          window.dispatchEvent(new Event("arbiter:auth-expired"));
+          return;
+        }
         if (!closed) {
           retry = window.setTimeout(connect, Math.min(5000, 400 * 2 ** attempt++));
         }
