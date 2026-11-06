@@ -123,7 +123,7 @@ export default function App() {
             access is allowlisted.
           </span>
           <span className="text-muted/60">·</span>
-          <span>No authentication — run behind a private network or reverse proxy.</span>
+          <span>Admin session protected · exchange keys remain server-side.</span>
           <span className="text-muted/60">·</span>
           <span>Matched strikes are not identical contracts. Not investment advice.</span>
         </footer>

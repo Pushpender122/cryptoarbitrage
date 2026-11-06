@@ -75,6 +75,12 @@ class Settings:
     )
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
 
+    # Single-operator web authentication.
+    admin_password: str = _str("ADMIN_PASSWORD")
+    session_secret: str = _str("SESSION_SECRET")
+    session_ttl_seconds: int = max(300, int(_float("SESSION_TTL_SECONDS", 43200)))
+    session_cookie_secure: bool = _bool("SESSION_COOKIE_SECURE", False)
+
     @property
     def delta_live_ready(self) -> bool:
         return bool(self.delta_api_key and self.delta_api_secret)
