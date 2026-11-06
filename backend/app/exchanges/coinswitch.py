@@ -199,7 +199,7 @@ class CoinSwitchProvider(MarketDataProvider):
         try:
             payload = response.json()
         except ValueError as exc:
-            raise ProviderError(f"CoinSwitch returned non-JSON ({response.status_code})") from exc
+            raise ProviderError(f"CoinSwitch returned non-JSON ({response.status_code})", retryable=True) from exc
         if response.status_code >= 400 or payload.get("retCode") not in (0, None):
             raise ProviderError(
                 f"CoinSwitch error {payload.get('retCode')}: {payload.get('retMsg') or response.text[:200]}",
