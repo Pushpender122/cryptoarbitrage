@@ -55,6 +55,18 @@ npm run build                 # FastAPI serves frontend/dist on :8000
 
 Then open <http://localhost:8000>. Or run everything with `./run.sh`.
 
+### First-run authentication
+
+Before starting the backend, edit `backend/.env` and replace `ADMIN_PASSWORD` with a long,
+unique password. Generate a strong signing secret and paste it into `SESSION_SECRET`:
+
+    python -c "import secrets; print(secrets.token_urlsafe(48))"
+
+Use `SESSION_COOKIE_SECURE=true` when deployed behind HTTPS. The app has one administrator
+login (not multi-user accounts). Login sessions expire after `SESSION_TTL_SECONDS` and
+mutating requests require a CSRF token. Login attempts are throttled per source IP in the
+running backend process. Keep `.env` out of version control.
+
 Tests: `cd backend && .venv/bin/python -m pytest -q` (20 engine tests).
 
 Database: SQLite by default (`backend/terminal.db`). Postgres works through
@@ -172,5 +184,7 @@ dropped for that reason instead of showing them as opportunities.
    funded exchange account in this build. Delta's signed `size` convention and
    CoinSwitch's options `positionIdx`/qty semantics must be confirmed with your first
    real order before trusting the P&L figures.
-7. **No authentication.** Run it behind a private network, VPN or authenticated
-   reverse proxy. Keys stay server-side in `.env` and are never sent to the browser.
+7. The terminal now requires a single administrator password and signed session cookie.
+   Use HTTPS, a private network/VPN and firewall rules in production. This is not a
+   multi-user system and does not include MFA or distributed login throttling. Keys stay
+   server-side in `.env` and are never sent to the browser.
