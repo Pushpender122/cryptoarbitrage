@@ -82,3 +82,16 @@ def test_reduce_only_rejects_wrong_side():
     finally:
         db.close()
         engine.dispose()
+
+
+def test_order_that_flips_position_is_risk_increasing():
+    engine, db = _database(kill_switch=False)
+    try:
+        settings = db.get(RiskSettings, 1)
+        settings.max_open_positions = 1
+        db.commit()
+        with pytest.raises(RiskError, match="Open position limit reached"):
+            pretrade_check(db, _spec(), "sell", 3, 100, quote_for=lambda *_: None)
+    finally:
+        db.close()
+        engine.dispose()
