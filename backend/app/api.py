@@ -97,6 +97,19 @@ def _venue_sync(request: Request):
     return request.app.state.venue_sync
 
 
+def _require_copy_live_access(request: Request, source: str, target: str) -> None:
+    if settings.paper:
+        return
+    providers = request.app.state.providers
+    for exchange in (source, target):
+        provider = providers.get(exchange)
+        if provider is None or not provider.supports_trading:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot enable live copy trading: {exchange} API credentials or options allowlisting are not ready.",
+            )
+
+
 def _handle(exc: Exception) -> HTTPException:
     if isinstance(exc, (OrderError, risk.RiskError)):
         return HTTPException(status_code=400, detail=str(exc))
@@ -459,9 +472,11 @@ def list_strategies(db: Session = Depends(get_db)):
 
 
 @router.post("/copy-strategies")
-def create_strategy(payload: CopyIn, db: Session = Depends(get_db)):
+def create_strategy(payload: CopyIn, request: Request, db: Session = Depends(get_db)):
     if payload.source_exchange == payload.target_exchange:
         raise HTTPException(status_code=400, detail="Source and target exchanges must differ.")
+    if payload.enabled:
+        _require_copy_live_access(request, payload.source_exchange, payload.target_exchange)
     strategy = CopyStrategy(
         name=payload.name,
         source_exchange=payload.source_exchange,
@@ -479,11 +494,13 @@ def create_strategy(payload: CopyIn, db: Session = Depends(get_db)):
 
 
 @router.patch("/copy-strategies/{strategy_id}")
-def update_strategy(strategy_id: int, payload: CopyPatch, db: Session = Depends(get_db)):
+def update_strategy(strategy_id: int, payload: CopyPatch, request: Request, db: Session = Depends(get_db)):
     strategy = db.get(CopyStrategy, strategy_id)
     if strategy is None:
         raise HTTPException(status_code=404, detail="Strategy not found")
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("enabled") is True:
+        _require_copy_live_access(request, strategy.source_exchange, strategy.target_exchange)
     if "underlyings" in changes and changes["underlyings"] is not None:
         changes["underlyings"] = ",".join(
             sorted({u.strip().upper() for u in changes["underlyings"] if u.strip()})
