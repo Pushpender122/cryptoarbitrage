@@ -142,8 +142,11 @@ def pretrade_check(
             )
         return settings
 
-    opening = existing_qty == 0 or (existing_qty > 0) == (side == "buy")
-    risk_increasing = opening
+    signed_change = qty if side == "buy" else -qty
+    projected_qty = existing_qty + signed_change
+    # An order that crosses through flat and opens the opposite side increases
+    # absolute exposure even though it initially reduces the old position.
+    risk_increasing = abs(projected_qty) > abs(existing_qty) + 1e-9
 
     if risk_increasing:
         count = len(venue_position_rows(db)) if live else len(open_positions(db))
