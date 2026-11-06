@@ -55,6 +55,33 @@ npm run build                 # FastAPI serves frontend/dist on :8000
 
 Then open <http://localhost:8000>. Or run everything with `./run.sh`.
 
+### Windows setup (PowerShell)
+
+Open two PowerShell terminals from the repository folder.
+
+**Terminal 1 — backend**
+
+```powershell
+cd backend
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Edit .env and set ADMIN_PASSWORD, SESSION_SECRET and your exchange credentials.
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+**Terminal 2 — frontend**
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173>. Vite proxies the API and WebSocket requests to the backend.
+For a single-server build instead, run `npm run build` in `frontend` and open
+<http://localhost:8000>.
+
 ### First-run authentication
 
 Before starting the backend, edit `backend/.env` and replace `ADMIN_PASSWORD` with a long,
@@ -67,7 +94,7 @@ login (not multi-user accounts). Login sessions expire after `SESSION_TTL_SECOND
 mutating requests require a CSRF token. Login attempts are throttled per source IP in the
 running backend process. Keep `.env` out of version control.
 
-Tests: `cd backend && .venv/bin/python -m pytest -q` (20 engine tests).
+Tests: `cd backend && .venv/bin/python -m pytest -q`; on Windows use `.\\.venv\\Scripts\\python.exe -m pytest -q` from the backend folder.
 
 Database: SQLite by default (`backend/terminal.db`). Postgres works through
 `DATABASE_URL` after `pip install "psycopg[binary]"`. Redis is not used in this build.
