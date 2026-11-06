@@ -16,10 +16,15 @@ export function AuthGate() {
 
   useEffect(() => {
     let active = true;
+    const expireSession = () => setState("signed-out");
+    window.addEventListener("arbiter:auth-expired", expireSession);
     fetch("/api/auth/me", { credentials: "same-origin" })
       .then((response) => { if (active) setState(response.ok ? "signed-in" : "signed-out"); })
       .catch(() => { if (active) { setError("Cannot reach the server. Check that the backend is running."); setState("signed-out"); } });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      window.removeEventListener("arbiter:auth-expired", expireSession);
+    };
   }, []);
 
   async function submit(event: FormEvent) {
