@@ -6,12 +6,13 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import api
+from .auth import auth_configured, auth_router, require_auth, verify_session_token, SESSION_COOKIE
 from .config import FRONTEND_DIST, settings
 from .db import SessionLocal, init_db
 from .exchanges.base import iso_utc
@@ -102,13 +103,23 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_credentials=True,
 )
-app.include_router(api.router)
+app.include_router(auth_router)
+app.include_router(api.router, dependencies=[Depends(require_auth)])
 
 
 @app.websocket("/ws")
 async def websocket_stream(websocket: WebSocket):
+    session = verify_session_token(websocket.cookies.get(SESSION_COOKIE))
+    origin = websocket.headers.get("origin", "")
+    host = websocket.headers.get("host", "")
+    allowed_hosts = {item.split("://", 1)[-1].split("/", 1)[0] for item in settings.cors_origins}
+    origin_host = origin.split("://", 1)[-1].split("/", 1)[0] if origin else ""
+    if not auth_configured() or not session or (origin_host != host and origin_host not in allowed_hosts):
+        await websocket.close(code=4401)
+        return
     await websocket.accept()
     hub: Hub = app.state.hub
     market: MarketService = app.state.market
