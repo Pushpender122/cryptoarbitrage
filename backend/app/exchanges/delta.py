@@ -151,7 +151,7 @@ class DeltaProvider(MarketDataProvider):
         if response.status_code >= 400 or data.get("success") is False:
             message = data.get("error") or {}
             detail = message.get("context") or message.get("code") or response.text[:200]
-            raise ProviderError(f"Delta error {response.status_code}: {detail}")
+            raise ProviderError(f"Delta error {response.status_code}: {detail}", retryable=response.status_code >= 500)
         self.last_ok_at = datetime.now(timezone.utc)
         self.last_error = None
         return data
