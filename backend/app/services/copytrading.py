@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -65,7 +66,7 @@ class CopyEngine:
         if spec is None:
             strategy.last_error = "No equivalent contract on the target venue."
             return
-        qty = self._sized_qty(filled_qty, strategy.size_ratio, strategy.max_qty, spec.min_qty)
+        qty = self._sized_qty(filled_qty, strategy.size_ratio, strategy.max_qty, spec.min_qty, spec.qty_step)
         if qty <= 0:
             strategy.last_error = "Mirrored quantity rounded to zero."
             return
@@ -106,7 +107,7 @@ class CopyEngine:
         )
         if spec is None:
             return
-        target_qty = self._sized_qty(filled_qty, strategy.size_ratio, strategy.max_qty, spec.min_qty)
+        target_qty = self._sized_qty(filled_qty, strategy.size_ratio, strategy.max_qty, spec.min_qty, spec.qty_step)
         if target_qty <= 0:
             return
 
@@ -154,8 +155,30 @@ class CopyEngine:
             logger.warning("copy exit failed for strategy %s: %s", strategy.id, exc)
 
     @staticmethod
-    def _sized_qty(source_qty: float, ratio: float, max_qty: float, min_qty: float) -> float:
-        qty = min(max_qty, source_qty * ratio)
-        if qty < min_qty:
+    def _sized_qty(
+        source_qty: float,
+        ratio: float,
+        max_qty: float,
+        min_qty: float,
+        qty_step: float = 1.0,
+    ) -> float:
+        """Scale/cap a copied fill and round DOWN to the target venue lot step.
+
+        Rounding down avoids exceeding the configured copy size or source fill.
+        """
+        try:
+            requested = min(
+                Decimal(str(max_qty)),
+                Decimal(str(source_qty)) * Decimal(str(ratio)),
+            )
+            step = Decimal(str(qty_step))
+            minimum = Decimal(str(min_qty))
+        except (InvalidOperation, ValueError):
             return 0.0
-        return float(round(qty))
+        if requested <= 0 or step <= 0 or minimum <= 0:
+            return 0.0
+        lots = (requested / step).to_integral_value(rounding=ROUND_FLOOR)
+        sized = lots * step
+        if sized < minimum:
+            return 0.0
+        return float(sized)
