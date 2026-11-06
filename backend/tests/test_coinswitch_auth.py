@@ -13,6 +13,7 @@ def test_coinswitch_signer_matches_hex_ed25519_reference(monkeypatch):
     cfg = SimpleNamespace(
         coinswitch_api_key=public_key.hex(),
         coinswitch_api_secret=seed.hex(),
+        coinswitch_live_ready=True,
     )
     provider = CoinSwitchProvider(cfg)
     monkeypatch.setattr("app.exchanges.coinswitch.time.time", lambda: 1_800_000_000.123)
@@ -29,7 +30,7 @@ def test_coinswitch_signer_matches_hex_ed25519_reference(monkeypatch):
 
 def test_coinswitch_signer_rejects_wrong_private_key_length():
     provider = CoinSwitchProvider(
-        SimpleNamespace(coinswitch_api_key="public", coinswitch_api_secret="abcd")
+        SimpleNamespace(coinswitch_api_key="public", coinswitch_api_secret="abcd", coinswitch_live_ready=True)
     )
     try:
         provider._sign("GET", "/v5/market/time")
