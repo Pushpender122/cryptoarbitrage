@@ -21,11 +21,19 @@ export interface SnapshotQuery {
   minEdgeBps?: number;
 }
 
+function csrfToken(): string {
+  const entry = document.cookie.split("; ").find((part) => part.startsWith("arbiter_csrf="));
+  return entry ? decodeURIComponent(entry.slice("arbiter_csrf=".length)) : "";
+}
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  const method = (init?.method ?? "GET").toUpperCase();
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const csrf = csrfToken();
+    if (csrf) headers.set("X-CSRF-Token", csrf);
+  }
+  const response = await fetch(path, { ...init, credentials: "same-origin", headers });
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
     try {
