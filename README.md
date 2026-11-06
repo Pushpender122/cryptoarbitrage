@@ -7,6 +7,11 @@ It matches identical option contracts across both venues, prices the spread afte
 fees and slippage, routes single-leg or paired orders through one interface, and
 tracks positions, risk and copy-trading rules.
 
+Copy rules currently mirror fills from orders created and tracked by this terminal.
+They do not yet import manual trades placed directly in the Delta or CoinSwitch exchange apps
+or orders created by unrelated bots. Account-wide external fill ingestion is a separate
+integration step.
+
 ![stack](https://img.shields.io/badge/backend-FastAPI%20%2B%20SQLAlchemy-0b0e14) ![stack](https://img.shields.io/badge/frontend-React%20%2B%20Tailwind%20v4-0b0e14)
 
 ---
