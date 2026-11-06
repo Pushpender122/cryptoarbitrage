@@ -204,6 +204,7 @@ class CoinSwitchProvider(MarketDataProvider):
             raise ProviderError(
                 f"CoinSwitch error {payload.get('retCode')}: {payload.get('retMsg') or response.text[:200]}",
                 code=str(payload.get("retCode")),
+                retryable=response.status_code >= 500,
             )
         return payload
 
