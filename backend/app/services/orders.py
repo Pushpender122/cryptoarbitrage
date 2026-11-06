@@ -161,19 +161,43 @@ class OrderService:
             else:
                 order.status = "open"
         else:
-            ack = await provider.place_order(
-                OrderRequest(
-                    symbol=spec.symbol,
-                    exchange_id=spec.exchange_id,
-                    side=request.side,
-                    qty=request.qty,
-                    order_type=request.order_type,
-                    limit_price=request.limit_price,
-                    time_in_force=request.time_in_force,
-                    reduce_only=request.reduce_only,
-                    client_order_id=order.client_order_id,
+            # Persist the idempotency key before sending anything to the venue. If the
+            # network drops after the exchange accepts an order, reconciliation can
+            # still query by client_order_id instead of losing the order or duplicating it.
+            db.commit()
+            db.refresh(order)
+            try:
+                ack = await provider.place_order(
+                    OrderRequest(
+                        symbol=spec.symbol,
+                        exchange_id=spec.exchange_id,
+                        side=request.side,
+                        qty=request.qty,
+                        order_type=request.order_type,
+                        limit_price=request.limit_price,
+                        time_in_force=request.time_in_force,
+                        reduce_only=request.reduce_only,
+                        client_order_id=order.client_order_id,
+                    )
                 )
-            )
+            except ProviderError as exc:
+                order.error = (
+                    f"Submission outcome uncertain; reconciliation will query client order "
+                    f"ID {order.client_order_id}. Original error: {exc}"
+                )
+                order.status = "pending" if exc.retryable else "rejected"
+                db.commit()
+                if exc.retryable:
+                    raise ProviderError(order.error, code=exc.code, retryable=True) from exc
+                raise
+            except Exception as exc:  # noqa: BLE001 - a transport/parser failure may follow acceptance
+                order.status = "pending"
+                order.error = (
+                    f"Submission outcome uncertain; reconciliation will query client order "
+                    f"ID {order.client_order_id}. Original error: {exc}"
+                )
+                db.commit()
+                raise ProviderError(order.error, retryable=True) from exc
             order.exchange_order_id = ack.exchange_order_id
             order.status = ack.status or "accepted"
             if ack.error:
