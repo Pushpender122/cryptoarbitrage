@@ -125,7 +125,7 @@ def status(request: Request, db: Session = Depends(get_db)):
     if not settings.coinswitch_live_ready:
         assumptions.insert(
             0,
-            "CoinSwitch options market data is private beta (401 until allowlisted). Its leg is a simulated book and is labelled 'simulated' everywhere.",
+            "CoinSwitch options require per-key private-beta allowlisting. Without it, the provider is unavailable or uses a clearly labelled simulated mirror according to COINSWITCH_SIMULATED.",
         )
     if not settings.paper:
         assumptions.append(
