@@ -120,7 +120,7 @@ def status(request: Request, db: Session = Depends(get_db)):
         "Fees use venue taker rates. CoinSwitch taker fee is an assumption until your account's real specs are known.",
         "A slippage buffer is applied to both legs of every arbitrage calculation.",
         "Delta options are USD-settled; CoinSwitch options settlement is unverified, so USD/USDT is normalised and flagged.",
-        "This terminal has no authentication — run it behind a private network or reverse proxy.",
+        "The terminal requires the configured single-administrator session; all trading API routes are authenticated.",
     ]
     if not settings.coinswitch_live_ready:
         assumptions.insert(
