@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #06070a;
+  --color-panel: #0b0e14;
+  --color-panel-2: #0f131b;
+  --color-line: #1b2130;
+  --color-line-strong: #2a3244;
+  --color-muted: #7f8b9e;
+  --color-strong: #e8ebf2;
+  --color-delta: #4c9dff;
+  --color-cs: #f5a524;
+  --color-up: #2fe0a0;
+  --color-down: #ff5d73;
+  --color-warn: #ffcc66;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #06070a;
+  color: #e8ebf2;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 1;
+  background-image:
+    radial-gradient(circle at 15% -10%, rgba(76, 157, 255, 0.08), transparent 45%),
+    radial-gradient(circle at 90% 0%, rgba(245, 165, 36, 0.06), transparent 40%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: #1f2a3d;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3244 transparent;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
