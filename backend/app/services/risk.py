@@ -149,7 +149,7 @@ def pretrade_check(
 
     if risk_increasing:
         count = len(venue_position_rows(db)) if live else len(open_positions(db))
-        if existing_qty == 0 and count >= settings.max_open_positions:
+        if count >= settings.max_open_positions:
             raise RiskError(
                 f"Open position limit reached ({count}/{settings.max_open_positions})."
             )
