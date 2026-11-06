@@ -133,6 +133,9 @@ def pretrade_check(
     if reduce_only:
         if existing_qty == 0:
             raise RiskError("Reduce-only order rejected: there is no open position to reduce.")
+        expected_side = "sell" if existing_qty > 0 else "buy"
+        if side != expected_side:
+            raise RiskError(f"Reduce-only order must be {expected_side} to reduce the current position.")
         if qty > abs(existing_qty) + 1e-9:
             raise RiskError(
                 f"Reduce-only quantity {qty:g} exceeds the open position size {abs(existing_qty):g}."
