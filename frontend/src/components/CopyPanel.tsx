@@ -53,7 +53,7 @@ export function CopyPanel({ className, strategies, onCreate, onToggle, onDelete 
     <Panel
       className={className}
       title="Copy trading"
-      subtitle="Mirror fills from one venue onto the other, with its own size cap and risk gate"
+      subtitle="Mirror fills placed through this terminal, with a separate size cap and risk gate"
       actions={
         <Button size="sm" variant="outline" onClick={() => setOpen((value) => !value)}>
           {open ? "Hide form" : "New rule"}
@@ -63,7 +63,7 @@ export function CopyPanel({ className, strategies, onCreate, onToggle, onDelete 
     >
       {strategies.length === 0 ? (
         <EmptyState>
-          No copy rules yet. A rule mirrors filled orders — including exits — from the source venue to the target.
+          No copy rules yet. Rules mirror orders placed through this terminal. Trades made directly in an exchange app are not imported yet.
         </EmptyState>
       ) : (
         <div className="space-y-1.5">

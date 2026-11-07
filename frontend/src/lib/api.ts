@@ -34,6 +34,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (csrf) headers.set("X-CSRF-Token", csrf);
   }
   const response = await fetch(path, { ...init, credentials: "same-origin", headers });
+  if (response.status === 401) {
+    window.dispatchEvent(new Event("arbiter:auth-expired"));
+  }
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
     try {

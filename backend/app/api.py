@@ -97,6 +97,19 @@ def _venue_sync(request: Request):
     return request.app.state.venue_sync
 
 
+def _require_copy_live_access(request: Request, source: str, target: str) -> None:
+    if settings.paper:
+        return
+    providers = request.app.state.providers
+    for exchange in (source, target):
+        provider = providers.get(exchange)
+        if provider is None or not provider.supports_trading:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot enable live copy trading: {exchange} API credentials or options allowlisting are not ready.",
+            )
+
+
 def _handle(exc: Exception) -> HTTPException:
     if isinstance(exc, (OrderError, risk.RiskError)):
         return HTTPException(status_code=400, detail=str(exc))
@@ -120,12 +133,12 @@ def status(request: Request, db: Session = Depends(get_db)):
         "Fees use venue taker rates. CoinSwitch taker fee is an assumption until your account's real specs are known.",
         "A slippage buffer is applied to both legs of every arbitrage calculation.",
         "Delta options are USD-settled; CoinSwitch options settlement is unverified, so USD/USDT is normalised and flagged.",
-        "This terminal has no authentication — run it behind a private network or reverse proxy.",
+        "The terminal requires the configured single-administrator session; all trading API routes are authenticated.",
     ]
     if not settings.coinswitch_live_ready:
         assumptions.insert(
             0,
-            "CoinSwitch options market data is private beta (401 until allowlisted). Its leg is a simulated book and is labelled 'simulated' everywhere.",
+            "CoinSwitch options require per-key private-beta allowlisting. Without it, the provider is unavailable or uses a clearly labelled simulated mirror according to COINSWITCH_SIMULATED.",
         )
     if not settings.paper:
         assumptions.append(
@@ -459,9 +472,11 @@ def list_strategies(db: Session = Depends(get_db)):
 
 
 @router.post("/copy-strategies")
-def create_strategy(payload: CopyIn, db: Session = Depends(get_db)):
+def create_strategy(payload: CopyIn, request: Request, db: Session = Depends(get_db)):
     if payload.source_exchange == payload.target_exchange:
         raise HTTPException(status_code=400, detail="Source and target exchanges must differ.")
+    if payload.enabled:
+        _require_copy_live_access(request, payload.source_exchange, payload.target_exchange)
     strategy = CopyStrategy(
         name=payload.name,
         source_exchange=payload.source_exchange,
@@ -479,11 +494,13 @@ def create_strategy(payload: CopyIn, db: Session = Depends(get_db)):
 
 
 @router.patch("/copy-strategies/{strategy_id}")
-def update_strategy(strategy_id: int, payload: CopyPatch, db: Session = Depends(get_db)):
+def update_strategy(strategy_id: int, payload: CopyPatch, request: Request, db: Session = Depends(get_db)):
     strategy = db.get(CopyStrategy, strategy_id)
     if strategy is None:
         raise HTTPException(status_code=404, detail="Strategy not found")
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("enabled") is True:
+        _require_copy_live_access(request, strategy.source_exchange, strategy.target_exchange)
     if "underlyings" in changes and changes["underlyings"] is not None:
         changes["underlyings"] = ",".join(
             sorted({u.strip().upper() for u in changes["underlyings"] if u.strip()})

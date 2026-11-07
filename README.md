@@ -7,6 +7,11 @@ It matches identical option contracts across both venues, prices the spread afte
 fees and slippage, routes single-leg or paired orders through one interface, and
 tracks positions, risk and copy-trading rules.
 
+Copy rules currently mirror fills from orders created and tracked by this terminal.
+They do not yet import manual trades placed directly in the Delta or CoinSwitch exchange apps
+or orders created by unrelated bots. Account-wide external fill ingestion is a separate
+integration step.
+
 ![stack](https://img.shields.io/badge/backend-FastAPI%20%2B%20SQLAlchemy-0b0e14) ![stack](https://img.shields.io/badge/frontend-React%20%2B%20Tailwind%20v4-0b0e14)
 
 ---
@@ -55,6 +60,33 @@ npm run build                 # FastAPI serves frontend/dist on :8000
 
 Then open <http://localhost:8000>. Or run everything with `./run.sh`.
 
+### Windows setup (PowerShell)
+
+Open two PowerShell terminals from the repository folder.
+
+**Terminal 1 — backend**
+
+```powershell
+cd backend
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Edit .env and set ADMIN_PASSWORD, SESSION_SECRET and your exchange credentials.
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+**Terminal 2 — frontend**
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open <http://localhost:5173>. Vite proxies the API and WebSocket requests to the backend.
+For a single-server build instead, run `npm run build` in `frontend` and open
+<http://localhost:8000>.
+
 ### First-run authentication
 
 Before starting the backend, edit `backend/.env` and replace `ADMIN_PASSWORD` with a long,
@@ -67,7 +99,7 @@ login (not multi-user accounts). Login sessions expire after `SESSION_TTL_SECOND
 mutating requests require a CSRF token. Login attempts are throttled per source IP in the
 running backend process. Keep `.env` out of version control.
 
-Tests: `cd backend && .venv/bin/python -m pytest -q` (20 engine tests).
+Tests: `cd backend && .venv/bin/python -m pytest -q`; on Windows use `.\\.venv\\Scripts\\python.exe -m pytest -q` from the backend folder.
 
 Database: SQLite by default (`backend/terminal.db`). Postgres works through
 `DATABASE_URL` after `pip install "psycopg[binary]"`. Redis is not used in this build.
@@ -167,23 +199,23 @@ dropped for that reason instead of showing them as opportunities.
 
 ## Known limits (read before risking capital)
 
-1. **CoinSwitch options are simulated** in this build; its symbol grammar, contract
-   size and settlement currency are unverified until your key is allowlisted.
-   Instrument metadata is used when present, with a heuristic symbol parser as
-   fallback (failing instruments are counted and reported, not guessed).
-2. Delta options settle in **USD**; the CoinSwitch leg is assumed USDT. Normalised
-   and flagged, but stablecoin/FX risk is real.
+1. CoinSwitch options use the HFT API's `category: option` surface when
+   `COINSWITCH_OPTIONS_ALLOWLISTED=true` and valid hex Ed25519 credentials are set.
+   Otherwise the CoinSwitch leg is simulated and clearly labelled. Its options
+   metadata and symbol mapping still need confirmation against your allowlisted account.
+2. Delta options settle in **USD**; CoinSwitch settlement is read from instrument
+   metadata (typically USDT). USD/USDT normalisation is flagged; stablecoin/FX risk remains.
 3. Fees are venue taker rates; the CoinSwitch taker fee is an **assumption**
-   (configurable) until account specs are known.
+   (configurable) until your account's actual fee schedule is confirmed.
 4. Margin/leverage per venue is displayed from contract metadata only; the terminal
    does not simulate margin calls or liquidation.
-5. Quantities: Delta `size` is integer contracts. CoinSwitch documents options
-   `qty` in the base asset, which is ambiguous for options — verify with your key.
-6. Live reconciliation is polling-based, not a private WebSocket stream, and has been
-   exercised against stubbed venue responses only — it has not been run against a
-   funded exchange account in this build. Delta's signed `size` convention and
-   CoinSwitch's options `positionIdx`/qty semantics must be confirmed with your first
-   real order before trusting the P&L figures.
+5. Order quantities and limit prices are checked against each contract's published
+   `minOrderQty`, `qtyStep`, and `tickSize` before routing. Confirm the allowlisted
+   CoinSwitch options contract-value semantics against your account.
+6. Live reconciliation is polling-based, not a private WebSocket stream. It has not
+   been validated against a funded exchange account in this build. Start in paper
+   mode and verify order status, fills, position signs, settlement and P&L with
+   minimal-size live orders before relying on the figures.
 7. The terminal now requires a single administrator password and signed session cookie.
    Use HTTPS, a private network/VPN and firewall rules in production. This is not a
    multi-user system and does not include MFA or distributed login throttling. Keys stay

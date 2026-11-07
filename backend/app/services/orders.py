@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal, InvalidOperation
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -54,6 +55,35 @@ class OrderService:
         self.copy_engine: Any = None  # set at startup to avoid an import cycle
 
     # ------------------------------------------------------------------ placing
+    @staticmethod
+    def _validate_contract_constraints(
+        spec: ContractSpec,
+        qty: float,
+        order_type: str,
+        limit_price: float | None,
+    ) -> None:
+        """Reject quantities/prices that violate the exchange's published increments."""
+        try:
+            quantity = Decimal(str(qty))
+            minimum = Decimal(str(spec.min_qty))
+            step = Decimal(str(spec.qty_step))
+        except (InvalidOperation, ValueError) as exc:
+            raise OrderError("Invalid order quantity or contract lot specification.") from exc
+        if step <= 0 or quantity < minimum:
+            raise OrderError(f"Quantity must be at least {spec.min_qty:g}.")
+        lots = (quantity / step).to_integral_value()
+        if abs(quantity - lots * step) > Decimal("0.000000001"):
+            raise OrderError(f"Quantity must be a multiple of {spec.qty_step:g} for {spec.exchange}.")
+        if order_type == "limit" and limit_price is not None and spec.tick_size > 0:
+            try:
+                price = Decimal(str(limit_price))
+                tick = Decimal(str(spec.tick_size))
+            except (InvalidOperation, ValueError) as exc:
+                raise OrderError("Invalid limit price or tick size.") from exc
+            ticks = (price / tick).to_integral_value()
+            if abs(price - ticks * tick) > Decimal("0.000000001"):
+                raise OrderError(f"Limit price must be a multiple of {spec.tick_size:g} for {spec.exchange}.")
+
     async def place(self, db: Session, request: NewOrder) -> Order:
         spec = self.market.spec(request.exchange, request.symbol)
         if spec is None:
@@ -64,6 +94,9 @@ class OrderService:
             raise OrderError("Order type must be limit or market.")
         if request.order_type == "limit" and not request.limit_price:
             raise OrderError("Limit orders need a limit price.")
+        self._validate_contract_constraints(
+            spec, request.qty, request.order_type, request.limit_price
+        )
 
         quote = self.market.quote(request.exchange, spec.symbol)
         if quote is None:
@@ -128,19 +161,43 @@ class OrderService:
             else:
                 order.status = "open"
         else:
-            ack = await provider.place_order(
-                OrderRequest(
-                    symbol=spec.symbol,
-                    exchange_id=spec.exchange_id,
-                    side=request.side,
-                    qty=request.qty,
-                    order_type=request.order_type,
-                    limit_price=request.limit_price,
-                    time_in_force=request.time_in_force,
-                    reduce_only=request.reduce_only,
-                    client_order_id=order.client_order_id,
+            # Persist the idempotency key before sending anything to the venue. If the
+            # network drops after the exchange accepts an order, reconciliation can
+            # still query by client_order_id instead of losing the order or duplicating it.
+            db.commit()
+            db.refresh(order)
+            try:
+                ack = await provider.place_order(
+                    OrderRequest(
+                        symbol=spec.symbol,
+                        exchange_id=spec.exchange_id,
+                        side=request.side,
+                        qty=request.qty,
+                        order_type=request.order_type,
+                        limit_price=request.limit_price,
+                        time_in_force=request.time_in_force,
+                        reduce_only=request.reduce_only,
+                        client_order_id=order.client_order_id,
+                    )
                 )
-            )
+            except ProviderError as exc:
+                order.error = (
+                    f"Submission outcome uncertain; reconciliation will query client order "
+                    f"ID {order.client_order_id}. Original error: {exc}"
+                )
+                order.status = "pending" if exc.retryable else "rejected"
+                db.commit()
+                if exc.retryable:
+                    raise ProviderError(order.error, code=exc.code, retryable=True) from exc
+                raise
+            except Exception as exc:  # noqa: BLE001 - a transport/parser failure may follow acceptance
+                order.status = "pending"
+                order.error = (
+                    f"Submission outcome uncertain; reconciliation will query client order "
+                    f"ID {order.client_order_id}. Original error: {exc}"
+                )
+                db.commit()
+                raise ProviderError(order.error, retryable=True) from exc
             order.exchange_order_id = ack.exchange_order_id
             order.status = ack.status or "accepted"
             if ack.error:
@@ -410,6 +467,9 @@ class OrderService:
                     f"{leg.exchange} cannot trade live (keys or allowlist missing); "
                     "refusing to send the other leg naked."
                 )
+            self._validate_contract_constraints(
+                spec, leg.qty, leg.order_type, leg.limit_price
+            )
             risk.pretrade_check(
                 db,
                 spec,

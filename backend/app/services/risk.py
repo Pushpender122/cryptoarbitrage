@@ -91,22 +91,23 @@ def pretrade_check(
 ) -> RiskSettings:
     """Raise RiskError with an operator-readable reason, or return the settings used."""
     settings = get_settings(db)
-    if settings.kill_switch:
-        raise RiskError("Kill switch is on — all new orders are blocked.")
-    if not settings.trading_enabled:
+    if settings.kill_switch and not reduce_only:
+        raise RiskError("Kill switch is on — new risk-increasing orders are blocked.")
+    if not settings.trading_enabled and not reduce_only:
         raise RiskError("Trading is disabled in risk settings.")
     if qty <= 0:
         raise RiskError("Quantity must be positive.")
-    if qty > settings.max_order_qty:
-        raise RiskError(
-            f"Quantity {qty:g} exceeds the per-order limit of {settings.max_order_qty:g} contracts."
-        )
 
     notional = qty * price * spec.contract_value
-    if notional > settings.max_order_notional:
-        raise RiskError(
-            f"Order notional {notional:,.2f} exceeds the per-order limit of {settings.max_order_notional:,.2f}."
-        )
+    if not reduce_only:
+        if qty > settings.max_order_qty:
+            raise RiskError(
+                f"Quantity {qty:g} exceeds the per-order limit of {settings.max_order_qty:g} contracts."
+            )
+        if notional > settings.max_order_notional:
+            raise RiskError(
+                f"Order notional {notional:,.2f} exceeds the per-order limit of {settings.max_order_notional:,.2f}."
+            )
 
     quote = quote_for(spec.exchange, spec.symbol)
     if check_price_deviation and quote is not None and quote.mid:
@@ -129,12 +130,26 @@ def pretrade_check(
             select(Position).where(Position.exchange == spec.exchange, Position.symbol == spec.symbol)
         ).scalar_one_or_none()
         existing_qty = existing.qty if existing is not None else 0.0
-    opening = existing_qty == 0 or (existing_qty > 0) == (side == "buy")
-    risk_increasing = not reduce_only and opening
+    if reduce_only:
+        if existing_qty == 0:
+            raise RiskError("Reduce-only order rejected: there is no open position to reduce.")
+        expected_side = "sell" if existing_qty > 0 else "buy"
+        if side != expected_side:
+            raise RiskError(f"Reduce-only order must be {expected_side} to reduce the current position.")
+        if qty > abs(existing_qty) + 1e-9:
+            raise RiskError(
+                f"Reduce-only quantity {qty:g} exceeds the open position size {abs(existing_qty):g}."
+            )
+        return settings
+
+    same_direction = existing_qty == 0 or (existing_qty > 0) == (side == "buy")
+    # An opposite-side order that exceeds the old position crosses through flat
+    # and opens a new position, even if the new position is smaller in absolute size.
+    risk_increasing = same_direction or qty > abs(existing_qty) + 1e-9
 
     if risk_increasing:
         count = len(venue_position_rows(db)) if live else len(open_positions(db))
-        if opening and count >= settings.max_open_positions:
+        if count >= settings.max_open_positions:
             raise RiskError(
                 f"Open position limit reached ({count}/{settings.max_open_positions})."
             )
